@@ -226,8 +226,8 @@ class Plot(object):
                 symlog = True
 
         if symlog:
-            ax.set_xscale('symlog', basex=2, linthreshx=2, linscalex=0.5)
-            ax.set_xlim(x_min, x_max)
+            # ax.set_xscale('symlog', basex=2, linthreshx=2, linscalex=0.5)
+            # ax.set_xlim(x_min, x_max)
             ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%d'))
 
     def plot_throughput_delay(self, data):
@@ -237,7 +237,9 @@ class Plot(object):
         max_mean_delay = -sys.maxint
 
         fig_raw, ax_raw = plt.subplots()
+        fig_raw_mean_delay, ax_raw_mean_delay= plt.subplots()
         fig_mean, ax_mean = plt.subplots()
+        fig_mean_mean, ax_mean_mean = plt.subplots()
 
         schemes_config = utils.parse_config()['schemes']
         for cc in data:
@@ -249,30 +251,42 @@ class Plot(object):
             cc_name = schemes_config[cc]['name']
             color = schemes_config[cc]['color']
             marker = schemes_config[cc]['marker']
-            y_data, x_data = zip(*value)
+            y_data, x_data, x_data_mean = zip(*value)
 
             # update min and max raw delay
-            min_raw_delay = min(min(x_data), min_raw_delay)
+            min_raw_delay = min(min(x_data_mean), min_raw_delay)
             max_raw_delay = max(max(x_data), max_raw_delay)
 
             # plot raw values
             ax_raw.scatter(x_data, y_data, color=color, marker=marker,
                            label=cc_name, clip_on=False)
 
+            ax_raw_mean_delay.scatter(x_data_mean, y_data, color=color, marker=marker,
+                           label=cc_name, clip_on=False)
+
             # plot the average of raw values
             x_mean = np.mean(x_data)
             y_mean = np.mean(y_data)
+            x_data_mean_mean = np.mean(x_data_mean)
+
+            
 
             # update min and max mean delay
-            min_mean_delay = min(x_mean, min_mean_delay)
+            min_mean_delay = min( min(x_mean, min_mean_delay) , x_data_mean_mean )
             max_mean_delay = max(x_mean, max_mean_delay)
 
             ax_mean.scatter(x_mean, y_mean, color=color, marker=marker,
                             clip_on=False)
+            ax_mean_mean.scatter(x_data_mean_mean, y_mean, color=color, marker=marker,
+                            clip_on=False)
             ax_mean.annotate(cc_name, (x_mean, y_mean))
+            
+            ax_mean_mean.annotate(cc_name, (x_data_mean_mean, y_mean))
 
-        for fig_type, fig, ax in [('raw', fig_raw, ax_raw),
-                                  ('mean', fig_mean, ax_mean)]:
+        for fig_type, fig, ax , stat in [('raw', fig_raw, ax_raw, '95'),
+                                  ('mean', fig_mean, ax_mean, '95'),
+                                  ('raw', fig_raw_mean_delay, ax_raw_mean_delay, 'avg'),
+                                  ('mean', fig_mean_mean, ax_mean_mean, 'avg')]:
             if fig_type == 'raw':
                 self.xaxis_log_scale(ax, min_raw_delay, max_raw_delay)
             else:
@@ -282,15 +296,25 @@ class Plot(object):
             yticks = ax.get_yticks()
             if yticks[0] < 0:
                 ax.set_ylim(bottom=0)
+            if stat == '95':
+                xlabel = '95th percentile one-way delay (ms)'
+                ax.set_xlabel(xlabel, fontsize=12)
+                ax.set_ylabel('Average throughput (Mbit/s)', fontsize=12)
+                ax.grid()
+            else:
+                xlabel = 'Average one-way delay (ms)'
+                ax.set_xlabel(xlabel, fontsize=12)
+                ax.set_ylabel('Average throughput (Mbit/s)', fontsize=12)
+                ax.grid()
 
-            xlabel = '95th percentile one-way delay (ms)'
-            ax.set_xlabel(xlabel, fontsize=12)
-            ax.set_ylabel('Average throughput (Mbit/s)', fontsize=12)
-            ax.grid()
 
         # save pantheon_summary.svg and .pdf
         ax_raw.set_title(self.expt_title.strip(), y=1.02, fontsize=12)
         lgd = ax_raw.legend(scatterpoints=1, bbox_to_anchor=(1, 0.5),
+                            loc='center left', fontsize=12)
+
+        ax_raw_mean_delay.set_title(self.expt_title.strip(), y=1.02, fontsize=12)
+        lgd = ax_raw_mean_delay.legend(scatterpoints=1, bbox_to_anchor=(1, 0.5),
                             loc='center left', fontsize=12)
 
         for graph_format in ['svg', 'pdf']:
@@ -299,14 +323,30 @@ class Plot(object):
             fig_raw.savefig(raw_summary, dpi=300, bbox_extra_artists=(lgd,),
                             bbox_inches='tight', pad_inches=0.2)
 
+        for graph_format in ['svg', 'pdf']:
+            raw_summary = path.join(
+                self.data_dir, 'pantheon_summary_mean_delay.%s' % graph_format) 
+
+            fig_raw_mean_delay.savefig(raw_summary, dpi=300, bbox_extra_artists=(lgd,),
+                            bbox_inches='tight', pad_inches=0.2)
+
         # save pantheon_summary_mean.svg and .pdf
         ax_mean.set_title(self.expt_title +
+                          ' (mean of all runs by scheme)', fontsize=12)
+
+        ax_mean_mean.set_title(self.expt_title +
                           ' (mean of all runs by scheme)', fontsize=12)
 
         for graph_format in ['svg', 'pdf']:
             mean_summary = path.join(
                 self.data_dir, 'pantheon_summary_mean.%s' % graph_format)
             fig_mean.savefig(mean_summary, dpi=300,
+                             bbox_inches='tight', pad_inches=0.2)
+
+        for graph_format in ['svg', 'pdf']:
+            mean_summary = path.join(
+                self.data_dir, 'pantheon_summary_mean_mean_delay.%s' % graph_format)
+            fig_mean_mean.savefig(mean_summary, dpi=300,
                              bbox_inches='tight', pad_inches=0.2)
 
         sys.stderr.write(
@@ -329,9 +369,10 @@ class Plot(object):
 
                 tput = perf_data[cc][run_id]['throughput']
                 delay = perf_data[cc][run_id]['delay']
+                mean_delay = perf_data[cc][run_id]['mean_delay']
                 if tput is None or delay is None:
                     continue
-                data_for_plot[cc].append((tput, delay))
+                data_for_plot[cc].append((tput, delay, mean_delay))
 
                 flow_data = perf_data[cc][run_id]['flow_data']
                 if flow_data is not None:

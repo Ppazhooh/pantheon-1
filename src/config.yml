@@ -50,7 +50,7 @@ schemes:
   vivace:
     name: PCC-Vivace
     color: blue
-    marker: '<'
+    marker: 'D'
   pcc_experimental:
     name: PCC-Expr
     color: olive
@@ -67,3 +67,36 @@ schemes:
     name: FillP-Sheep
     color: violet
     marker: 'D'
+  
+  my_cubic:
+    name: Cubic
+    color: black
+    marker: '*'
+  my_bbr:
+    name: BBR
+    color: gold
+    marker: '^'
+  c2tcp:
+    name: c2tcp
+    color: pink
+    marker: '1'
+  deepcc:
+    name: deepcc
+    color: brown
+    marker: 'v'
+  my_vegas:
+    name: Vegas
+    color: silver
+    marker: 'h'
+  orca:
+    name: orca
+    color: violet
+    marker: '8'
+  bbr_v1:
+    name: bbr_v1
+    color: magenta
+    marker: '2'
+  reminis:
+    name: Reminis
+    color: magenta
+    marker: '2'

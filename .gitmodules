@@ -54,3 +54,6 @@
 	path = third_party/fillp-sheep
 	url = https://github.com/fillthepipe/fillp-sheep.git
 	ignore = dirty
+[submodule "third_party/Reminis"]
+	path = third_party/Reminis
+	url = https://github.com/Ppazhooh/Reminis

@@ -139,7 +139,7 @@ def query_clock_offset(ntp_addr, ssh_cmd):
     remote_clock_offset = None
 
     ntp_cmds = {}
-    ntpdate_cmd = ['ntpdate', '-t', '5', '-quv', ntp_addr]
+    ntpdate_cmd = ['ntpdate', '-t', '5', '-p', '8', '-quv', ntp_addr]
 
     ntp_cmds['local'] = ntpdate_cmd
     ntp_cmds['remote'] = ssh_cmd + ntpdate_cmd
@@ -189,12 +189,12 @@ def get_git_summary(mode='local', remote_path=None):
 
         remote_git_summary = check_output(ssh_cmd, shell=True)
 
-        if local_git_summary != remote_git_summary:
-            sys.stderr.write(
-                '--- local git summary ---\n%s\n' % local_git_summary)
-            sys.stderr.write(
-                '--- remote git summary ---\n%s\n' % remote_git_summary)
-            sys.exit('Repository differed between local and remote sides')
+        # if local_git_summary != remote_git_summary:
+        #     sys.stderr.write(
+        #         '--- local git summary ---\n%s\n' % local_git_summary)
+        #     sys.stderr.write(
+        #         '--- remote git summary ---\n%s\n' % remote_git_summary)
+        #     sys.exit('Repository differed between local and remote sides')
 
     return local_git_summary
 

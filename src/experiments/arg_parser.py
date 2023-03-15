@@ -134,6 +134,10 @@ def parse_test_local(local):
         'that uplink (downlink) always represents the link from sender to '
         'receiver (from receiver to sender)')
 
+    local.add_argument('--buffer-size', metavar='BufferSize', type=int, default=100,
+                          help='buffer size')
+    local.add_argument('--mm-delay', metavar='linkdelay', type=int, default=100,
+                          help='link delay')
 
 def parse_test_remote(remote):
     remote.add_argument(
@@ -174,8 +178,8 @@ def verify_test_args(args):
             sys.exit('Cannot apply --prepend-mm-cmds, --append-mm-cmds or '
                      '--extra-mm-link-args without pantheon tunnels')
 
-    if args.runtime > 60 or args.runtime <= 0:
-        sys.exit('runtime cannot be non-positive or greater than 60 s')
+    # if args.runtime > 60 or args.runtime <= 0:
+    #     sys.exit('runtime cannot be non-positive or greater than 60 s')
     if args.flows < 0:
         sys.exit('flow cannot be negative')
     if args.interval < 0:

@@ -1,0 +1,432 @@
+--- 5G/src/orca-server-mahimahi.cc	2022-08-09 10:01:53.465170092 -0600
++++ /d1/pantheon/third_party/reminisce/src/orca-server-mahimahi.cc	2022-08-19 13:58:05.024537776 -0600
+@@ -115,6 +115,7 @@
+ 	pthread_t data_thread;
+ 	pthread_t cnt_thread;
+ 	pthread_t timer_thread;
++    pthread_t cwnd_logger_thread;
+ 
+ 	//Server address
+ 	struct sockaddr_in server_addr[FLOW_NUM];
+@@ -160,7 +161,7 @@
+     }
+ 
+     char container_cmd[500];
+-    sprintf(container_cmd,"sudo -u `whoami` %s/client $MAHIMAHI_BASE 1 %d",path,client_port);
++    // sprintf(container_cmd,"sudo -u `whoami` %s/client $MAHIMAHI_BASE 1 %d",path,client_port);
+     char cmd[1000];
+     char final_cmd[1000];
+ 
+@@ -172,10 +173,10 @@
+ 
+ 
+ 
+-    sprintf(cmd, "sudo -u `whoami` mm-loss downlink %f mm-delay %d mm-link %s/traces/%s %s/traces/%s --downlink-log=%s/logs/down-%s --uplink-queue=droptail --uplink-queue-args=\"packets=%d\" --downlink-queue=droptail --downlink-queue-args=\"packets=%d\" -- sh -c \'%s\' &",*loss_rate,delay_ms,path,uplink,path,downlink,path,log_file,qsize,qsize,container_cmd);
+-    sprintf(final_cmd,"%s",cmd);
++    // sprintf(cmd, "sudo -u `whoami` mm-loss downlink %f mm-delay %d mm-link %s/traces/%s %s/traces/%s --downlink-log=%s/logs/down-%s --uplink-queue=droptail --uplink-queue-args=\"packets=%d\" --downlink-queue=droptail --downlink-queue-args=\"packets=%d\" -- sh -c \'%s\' &",*loss_rate,delay_ms,path,uplink,path,downlink,path,log_file,qsize,qsize,container_cmd);
++    // sprintf(final_cmd,"%s",cmd);
+ 
+-    DBGPRINT(DBGSERVER,0,"Time:%.5f %s\n",(double)timestamp()/1000000,final_cmd);
++    // DBGPRINT(DBGSERVER,0,"Time:%.5f\n",(double)timestamp()/1000000);
+     info->trace=trace;
+     info->num_lines=num_lines;
+     /**
+@@ -260,7 +261,7 @@
+     // usleep(actor_id*10000+10000);
+     //Now its time to start the server-client app and tune C2TCP socket.
+     initial_timestamp();
+-    system(final_cmd);
++    // system(final_cmd);
+         
+     //Start listen
+     int maxfdp=-1;
+@@ -338,6 +339,13 @@
+                         return;
+                     }
+ 
++                    if(pthread_create(&cwnd_logger_thread, NULL , CwndThread, (void*)info) < 0)
++                    {
++                        perror("could not create cwnd_logger thread\n");
++                        close(sock[flow_index]);
++                        return;
++                    }
++
+                 }
+                 
+             DBGPRINT(0,0,"Server is Connected to the client...\n");
+@@ -377,8 +385,8 @@
+     int s = pthread_setschedparam( pthread_self(), policy, &param);
+     if (s != 0)
+     {
+-        DBGPRINT(0,0,"Cannot set priority (%d) for the Main: %s\n"
+-        ,param.__sched_priority,strerror(errno));
++        // DBGPRINT(0,0,"Cannot set priority (%d) for the Main: %s\n"
++        // ,param.__sched_priority,strerror(errno));
+     }
+ 
+     s = pthread_getschedparam( pthread_self(), &policy, &param);
+@@ -497,7 +505,7 @@
+     double predicted_queueing_delay = 0.0;
+     bool future_cat = false;
+     double future_safezon = 0.0;
+-
++    int prev_cwnd = 0;
+ 
+     while(send_traffic)  
+ 	{
+@@ -598,7 +606,7 @@
+                 }
+                 else
+                 {
+-                    bad_delay=20000; //Fixed rtt th if 0 was passed
++                    bad_delay=40000; //Fixed rtt th if 0 was passed
+                 }
+                   
+                
+@@ -609,7 +617,7 @@
+ 			        delay_deravative=0;
+ 		        }
+                 // DBGMARK(DBGSERVER,0,"current_delay is: %f. Previous was:%f \n",current_delay,prev_delay);
+-                DBGMARK(DBGSERVER,0,"delay_deravative : %f\n",delay_deravative);
++                // DBGERROR("sRTT is:%.3f \n", current_delay);
+                 safe_zone= 1- ( (current_delay - min_rtt) / double(bad_delay) );
+ 
+ 
+@@ -676,9 +684,10 @@
+ 
+             
+                
+-                            double cons = pow( 1.5, progressive_coef);
++                            // double cons = pow( 1.5, progressive_coef);
++                            double cons = pow( 2, progressive_coef);
+ 
+-            
++                            prev_cwnd = parsa_tcp_info.tcpi_snd_cwnd;
+ 
+                             target_ratio = floor(cons * parsa_tcp_info.tcpi_snd_cwnd);
+                             target_ratio = (alpha * target_ratio) + (1 - alpha) * cwnd_mean;
+@@ -688,7 +697,7 @@
+                                 target_ratio = MIN_CWND;
+ 
+                             }
+-                            DBGMARK(DBGSERVER,0,"Progressive Gaussian module activted:%f\n",cons);
++                            // DBGMARK(DBGSERVER,0,"Progressive Gaussian module activted:%f\n",cons);
+ 
+                             ret1 = setsockopt( sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+                             &target_ratio, sizeof( target_ratio ));
+@@ -702,25 +711,27 @@
+ 
+ 
+ 
+-                            double cons = pow( 2, conservative_coef);
++  //                          double cons = pow( 1.5, conservative_coef);
++
++
++//                            prev_cwnd = parsa_tcp_info.tcpi_snd_cwnd;
+ 
+ 			
+-                            target_ratio = floor( cons * parsa_tcp_info.tcpi_snd_cwnd );
+-                            target_ratio = ( alpha * target_ratio ) + ( 1 - alpha ) * cwnd_mean;
++                           // target_ratio = floor( cons * parsa_tcp_info.tcpi_snd_cwnd );
++                          //  target_ratio = ( alpha * target_ratio ) + ( 1 - alpha ) * cwnd_mean;
+ 
+               
+-                            if ( target_ratio < MIN_CWND )
+-                            {
++                          //  if ( target_ratio < MIN_CWND )
++                           // {
+                             
+-                                target_ratio = MIN_CWND;
+-
+-                            }
++                             //   target_ratio = MIN_CWND;
++                           // }
+                         
+-                            DBGMARK(DBGSERVER,0,"Conservative Gaussian module activted:%f\n",cons);
++                            // DBGMARK(DBGSERVER,0,"Conservative Gaussian module activted:%f\n",cons);
+                 
+-                            ret1 = setsockopt( sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+-                            &target_ratio, sizeof( target_ratio ));
+-cwnd_max = MAX_CWND;
++                           //  ret1 = setsockopt( sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
++   //                          &target_ratio, sizeof( target_ratio ));
++                                cwnd_max = MAX_CWND;
+                                 ret1 = setsockopt(sock_for_cnt[i], IPPROTO_TCP,TCP_CWND_CAP, &cwnd_max, sizeof(cwnd_max));
+ 
+ 
+@@ -731,6 +742,7 @@
+ 
+                             if (future_safezon>-1){
+                                 double cons = pow( 2, future_safezon);
++                                prev_cwnd = parsa_tcp_info.tcpi_snd_cwnd;
+                                 target_ratio = floor( cons * parsa_tcp_info.tcpi_snd_cwnd );
+                                 target_ratio = (alpha * target_ratio) + (1 - alpha) * cwnd_mean;
+                                 
+@@ -739,7 +751,7 @@
+                                 
+                                     target_ratio = MIN_CWND;
+                                 }
+-                                DBGMARK(DBGSERVER,0,"Future cat module activted:%f\n",cons);
++                                // DBGMARK(DBGSERVER,0,"Future cat module activted:%f\n",cons);
+                                 ret1 = setsockopt( sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+                                 &target_ratio, sizeof(target_ratio));
+ 
+@@ -751,7 +763,7 @@
+                             {
+                                 target_ratio = MIN_CWND;
+                         // target_ratio = (alpha * target_ratio) + (1 - alpha) * cwnd_mean;
+-                                DBGMARK(DBGSERVER,0,"Very bad future cat module activted\n");
++                                // DBGMARK(DBGSERVER,0,"Very bad future cat module activted\n");
+                                 ret1 = setsockopt(sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+                                  &target_ratio, sizeof(target_ratio));
+ cwnd_max = MAX_CWND;
+@@ -765,7 +777,9 @@
+                     else if(safe_zone > -1 )
+                     {
+                
+-                        double cons = pow(2, safe_zone-1);
++                         double cons = pow(2, safe_zone-1);
++                       // double cons = pow(2, safe_zone);
++                        prev_cwnd = parsa_tcp_info.tcpi_snd_cwnd;
+                         target_ratio = floor(cons * parsa_tcp_info.tcpi_snd_cwnd);
+                         target_ratio = (alpha * target_ratio) + (1 - alpha) * cwnd_mean;
+ 
+@@ -775,7 +789,7 @@
+                             target_ratio = MIN_CWND;
+ 
+                         }
+-                        DBGMARK(DBGSERVER,0,"Safe zone module activted:%f\n",cons);
++                        // DBGMARK(DBGSERVER,0,"Safe zone module activted:%f\n",cons);
+                         ret1 = setsockopt(sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+                          &target_ratio, sizeof(target_ratio));
+            
+@@ -785,8 +799,9 @@
+                     else
+                     {                                 
+                         target_ratio = MIN_CWND;
++                        prev_cwnd = parsa_tcp_info.tcpi_snd_cwnd;
+                         // target_ratio = (alpha * target_ratio) + (1 - alpha) * cwnd_mean;
+-                        DBGMARK(DBGSERVER,0,"Very bad safe zone module activted:\n");
++                        // DBGMARK(DBGSERVER,0,"Very bad safe zone module activted:\n");
+                         ret1 = setsockopt(sock_for_cnt[i], IPPROTO_TCP,TCP_CWND,
+                          &target_ratio, sizeof(target_ratio));
+                         if (safe_zone < -8 ){
+@@ -804,12 +819,11 @@
+ 
+ 
+ 
+-
+                     ret1 = get_my_tcp_info( sock_for_cnt[i], &parsa_tcp_info);
+ 
+                     sprintf( message, "%.4f\t%d\t%d\t%d\n",
+                         (double)timestamp()/1000000., parsa_tcp_info.tcpi_snd_cwnd,
+-                            target_ratio, slow_start_passed);
++                            prev_cwnd, slow_start_passed);
+ 
+                     cwnd_log << message;
+ 
+@@ -828,7 +842,7 @@
+ 
+                     prev_delay = current_delay;
+                     sprintf( message, "%.4f\t%d\t%d\t%d\n", (double)timestamp()/1000000.,
+-                        parsa_tcp_info.tcpi_snd_cwnd, target_ratio, slow_start_passed);
++                        parsa_tcp_info.tcpi_snd_cwnd, prev_cwnd, slow_start_passed);
+                     cwnd_log << message;
+ 
+                 }
+@@ -853,13 +867,13 @@
+     int s = pthread_setschedparam(pthread_self(), policy, &param);
+     if (s!=0)
+     {
+-        DBGERROR("Cannot set priority (%d) for the Main: %s\n",param.__sched_priority,strerror(errno));
++        // DBGERROR("Cannot set priority (%d) for the Main: %s\n",param.__sched_priority,strerror(errno));
+     }
+ 
+     s = pthread_getschedparam(pthread_self(),&policy,&param);
+     if (s!=0)
+     {
+-        DBGERROR("Cannot get priority for the Data thread: %s\n",strerror(errno));
++        // DBGERROR("Cannot get priority for the Data thread: %s\n",strerror(errno));
+     }
+     uint64_t fct_=start_of_client-initial_timestamp();
+     sInfo* info = (sInfo*)information;
+@@ -956,111 +970,10 @@
+     }
+     else if((*plugin_id)==0){
+ 
+-    struct sched_param param;
+-    param.__sched_priority=sched_get_priority_max(SCHED_RR);
+-    int policy=SCHED_RR;
+-    int s = pthread_setschedparam(pthread_self(), policy, &param);
+-    if (s!=0)
+-    {
+-        DBGPRINT(0,0,"Cannot set priority (%d) for the Main: %s\n",param.__sched_priority,strerror(errno));
+-    }
+-
+-    s = pthread_getschedparam(pthread_self(),&policy,&param);
+-    if (s!=0)
+-    {
+-        DBGPRINT(0,0,"Cannot get priority for the Data thread: %s\n",strerror(errno));
+-    }
+-    
+-
+-    DBGPRINT(DBGSERVER,0,"Time:%.5f Entering the Control Thread ...\n",(double)timestamp()/1000000);
+-
+-
+-    
+-	int ret1;
+-
+-
+-    char message[1000];
+-
+-
+-    ofstream cwnd_log;
+-    cwnd_log.open ("cwnd_log.txt");
+-
+-    sprintf(message,"TIME\tAPPLIED_CWND\tSLOW_START_PASSED\n");
+-
+-    cwnd_log << message;
+-
+-
+ 	int reuse = 1;
+-    int pre_id=9230;
+-    int pre_id_tmp=0;
+-    int msg_id=657;
+-    bool got_alpha=false;
+-    bool slow_start_passed=0;
+-    for(int i=0;i<FLOW_NUM;i++)
+-    {
+-        if (setsockopt(sock_for_cnt[i], IPPROTO_TCP, TCP_NODELAY, &reuse, sizeof(reuse)) < 0)
+-        {
+-            DBGMARK(0,0,"ERROR: set TCP_NODELAY option %s\n",strerror(errno));
+-            return((void *)0);
+-        }
+-    }
+-    char *num;
+-    // char*alpha;
+-    char*save_ptr;
+-    int got_no_zero=0;
+-    uint64_t t0,t1;
+-    t0=timestamp();
+-    //Time to start the Logic
+-
+-    int get_info_error_counter=0;
+-    int actor_is_dead_counter=0;
+-    int tmp_step=0;
+-
+-
+-    while(send_traffic)  
+-	{
+-       for(int i=0;i<flow_index;i++)
+-       {
+-           got_no_zero=0;
+-           usleep(report_period);
+-           while(!got_no_zero && send_traffic)
+-           {
+-
+-                // ret1= get_orca_info(sock_for_cnt[i],&orca_info);
+-                ret1= get_my_tcp_info(sock_for_cnt[i],&parsa_tcp_info);
+-                if(ret1<0)
+-                {
+-                    DBGMARK(0,0,"setsockopt: for index:%d flow_index:%d TCP_C2TCP ... %s (ret1:%d)\n",i,flow_index,strerror(errno),ret1);
+-                    return((void *)0);
+-                }
+-            
+-
+-
+-
+-                uint64_t now;
+-                now=timestamp();
+-
+-
+-                if (!slow_start_passed)
+-                        //Just for the first Time
+-                        slow_start_passed=(parsa_tcp_info.tcpi_snd_ssthresh<parsa_tcp_info.tcpi_snd_cwnd)?1:0;
+-
+-
+-                ret1= get_my_tcp_info(sock_for_cnt[i],&parsa_tcp_info);
+-
+-                sprintf(message,"%.4f\t%d\t%d\n",(double)timestamp()/1000000.,parsa_tcp_info.tcpi_snd_cwnd,slow_start_passed);
+-
+-                cwnd_log << message;                
+-                usleep(report_period);
+-           } 
+-       }
+-    }
+-    cwnd_log.close();
+-
+-    }
+     return((void *)0);
+ }
+-
++}
+ 
+ void* DataThread(void* info)
+ {
+@@ -1071,7 +984,7 @@
+     int s = pthread_setschedparam(pthread_self(), policy, &param);
+     if (s!=0)
+     {
+-        DBGERROR("Cannot set priority (%d) for the Main: %s\n",param.__sched_priority,strerror(errno));
++        // DBGERROR("Cannot set priority (%d) for the Main: %s\n",param.__sched_priority,strerror(errno));
+     }
+ 
+     s = pthread_getschedparam(pthread_self(),&policy,&param);
+@@ -1170,10 +1083,10 @@
+ 		{
+ 			DBGMARK(DBGSERVER,6,"++++++\n");
+ 			len-=send(sock_local,write_message,strlen(write_message),0);
+-		    // usleep(50); original clock       
++		    // usleep(50); original clock      
+             DBGMARK(DBGSERVER,5,"------\n");
+ 		}
+-        // usleep(100); original clock
++        // usleep(100); original clock 
+ 	}
+ 	flow->flowinfo.rem_size=0;
+     done=true;
+@@ -1182,3 +1095,44 @@
+     DBGPRINT(DBGSERVER,1,"done\n");
+ 	return((void *)0);
+ }
++
++void* CwndThread(void* information)
++{
++
++    DBGPRINT( DBGSERVER, 0, "Time:%.5f Entering the Cwnd logger Thread ...\n",
++    (double)timestamp()/1000000);
++
++
++    char cubic_message[1000];
++
++    ofstream cubic_cwnd_log;
++    cubic_cwnd_log.open ("cubic_cwnd_log.txt");
++
++    sprintf(cubic_message, "TIME\tCubic_cwnd\n");
++    cubic_cwnd_log << cubic_message;
++
++    int ret2;
++
++    while(true)
++    {
++
++        ret2 = get_my_tcp_info( sock_for_cnt[0], &parsa_tcp_info);
++
++        DBGPRINT( DBGSERVER, 5, "Time:%.5f CWND is:%d \n",
++         (double)timestamp()/1000000,parsa_tcp_info.tcpi_snd_cwnd); 
++        
++
++        sprintf( cubic_message, "%.4f\t%d", (double)timestamp()/1000000.,
++                        parsa_tcp_info.tcpi_snd_cwnd);
++        cubic_cwnd_log << cubic_message << endl;
++        // cubic_cwnd_log << cubic_message;
++
++
++
++        usleep(1000);
++    }
++
++    cubic_cwnd_log.close();
++
++    return((void *)0);
++}

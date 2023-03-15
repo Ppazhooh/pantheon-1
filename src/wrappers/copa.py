@@ -22,6 +22,8 @@ def main(delta_conf):
 
     if args.option == 'setup':
         check_call(['makepp'], cwd=cc_repo)
+        cmd = ['makepp', 'python_bindings']
+        check_call(cmd, cwd=cc_repo)
         return
 
     if args.option == 'receiver':

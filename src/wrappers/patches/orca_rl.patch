@@ -1,0 +1,11 @@
+--- a/rl-module/d5.py	2022-06-16 18:40:20.472489457 +0000
++++ b/Orca/rl-module/d5.py	2022-06-15 17:29:04.122510912 +0000
+@@ -142,7 +142,7 @@
+ 
+ def main():
+ 
+-    tf.get_logger().setLevel(logging.ERROR)
++    # tf.get_logger().setLevel(logging.ERROR)
+ 
+     parser = argparse.ArgumentParser()
+     parser.add_argument('--load', action='store_true', default=False, help='default is  %(default)s')

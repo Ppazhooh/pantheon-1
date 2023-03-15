@@ -17,6 +17,9 @@ from helpers import utils, kernel_ctl
 from helpers.subprocess_wrappers import Popen, call
 
 
+
+
+
 Flow = namedtuple('Flow', ['cc', # replace self.cc
                            'cc_src_local', # replace self.cc_src
                            'cc_src_remote', # replace self.r[cc_src]
@@ -53,6 +56,8 @@ class Test(object):
             self.prepend_mm_cmds = args.prepend_mm_cmds
             self.append_mm_cmds = args.append_mm_cmds
             self.extra_mm_link_args = args.extra_mm_link_args
+            self.mm_buffer = args.buffer_size
+            self.mm_delay = args.mm_delay
 
             # for convenience
             self.sender_side = 'remote'
@@ -110,7 +115,7 @@ class Test(object):
 
         if self.run_first == 'receiver' or self.flows > 0:
             # if receiver runs first OR if test inside pantheon tunnel
-            uplink_log = self.mm_datalink_log
+            uplink_log = self.mm_datalink_log 
             downlink_log = self.mm_acklink_log
             uplink_trace = self.datalink_trace
             downlink_trace = self.acklink_trace
@@ -126,10 +131,16 @@ class Test(object):
         if self.prepend_mm_cmds:
             self.mm_cmd += self.prepend_mm_cmds.split()
 
+        uplink_buffer = ''
         self.mm_cmd += [
+            'mm-delay {}'.format(self.mm_delay),
             'mm-link', uplink_trace, downlink_trace,
             '--uplink-log=' + uplink_log,
-            '--downlink-log=' + downlink_log]
+            '--downlink-log=' + downlink_log,
+            '--uplink-queue=droptail',
+            '--uplink-queue-args=\"packets={}\"'.format(self.mm_buffer),
+            '--downlink-queue=droptail',
+            '--downlink-queue-args=\"packets={}\"'.format(self.mm_buffer)]
 
         if self.extra_mm_link_args:
             self.mm_cmd += self.extra_mm_link_args.split()
@@ -197,8 +208,8 @@ class Test(object):
             self.run_first = None
             self.run_second = None
 
-        # wait for 3 seconds until run_first is ready
-        self.run_first_setup_time = 3
+        # wait for 10 seconds until run_first is ready //changed by Parsa
+        self.run_first_setup_time = 5
 
         # setup output logs
         self.datalink_name = self.cc + '_datalink_run%d' % self.run_id
@@ -224,10 +235,12 @@ class Test(object):
     def run_without_tunnel(self):
         port = utils.get_open_port()
 
+        buffer_size = 10000
+
         # run the side specified by self.run_first
         cmd = ['python', self.cc_src, self.run_first, port]
         sys.stderr.write('Running %s %s...\n' % (self.cc, self.run_first))
-        self.proc_first = Popen(cmd, preexec_fn=os.setsid)
+        self.proc_first = Popen(cmd,bufsize = buffer_size, preexec_fn=os.setsid)
 
         # sleep just in case the process isn't quite listening yet
         # the cleaner approach might be to try to verify the socket is open
@@ -239,7 +252,7 @@ class Test(object):
             self.cc_src, self.run_second, port)
         sh_cmd = ' '.join(self.mm_cmd) + " -- sh -c '%s'" % sh_cmd
         sys.stderr.write('Running %s %s...\n' % (self.cc, self.run_second))
-        self.proc_second = Popen(sh_cmd, shell=True, preexec_fn=os.setsid)
+        self.proc_second = Popen(sh_cmd, shell=True, bufsize = buffer_size ,preexec_fn=os.setsid)
 
         signal.signal(signal.SIGALRM, utils.timeout_handler)
         signal.alarm(self.runtime)
@@ -268,8 +281,10 @@ class Test(object):
         else:
             ts_manager_cmd = ['python', self.tunnel_manager]
 
+        buffer_size
+
         sys.stderr.write('[tunnel server manager (tsm)] ')
-        self.ts_manager = Popen(ts_manager_cmd, stdin=PIPE, stdout=PIPE,
+        self.ts_manager = Popen(ts_manager_cmd, bufsize = buffer_size, stdin=PIPE, stdout=PIPE,
                                 preexec_fn=os.setsid)
         ts_manager = self.ts_manager
 
@@ -293,7 +308,7 @@ class Test(object):
             tc_manager_cmd = self.mm_cmd + ['python', self.tunnel_manager]
 
         sys.stderr.write('[tunnel client manager (tcm)] ')
-        self.tc_manager = Popen(tc_manager_cmd, stdin=PIPE, stdout=PIPE,
+        self.tc_manager = Popen(tc_manager_cmd, bufsize = buffer_size, stdin=PIPE, stdout=PIPE,
                                 preexec_fn=os.setsid)
         tc_manager = self.tc_manager
 

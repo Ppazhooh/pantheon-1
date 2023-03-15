@@ -11,29 +11,30 @@ from helpers import utils
 def main():
     args = arg_parser.sender_first()
 
-    cc_repo = path.join(context.third_party_dir, 'verus')
-    send_src = path.join(cc_repo, 'src', 'verus_server')
-    recv_src = path.join(cc_repo, 'src', 'verus_client')
+    cc_repo = path.join(context.third_party_dir, 'reminisce')
+    send_src = path.join(cc_repo, 'orca-server-mahimahi')
+    recv_src = path.join(cc_repo, 'client')
 
     if args.option == 'deps':
         print 'libtbb-dev libasio-dev libalglib-dev libboost-system-dev'
         return
 
     if args.option == 'setup':
-        # apply patch to reduce MTU size
-        utils.apply_patch('verus.patch', cc_repo)
 
-        sh_cmd = './bootstrap.sh && ./configure && make -j'
+        sh_cmd = ' ./sysctl_stuff.sh && ./build.sh'
         check_call(sh_cmd, shell=True, cwd=cc_repo)
         return
 
-    if args.option == 'sender':
-        cmd = [send_src, '-name', utils.tmp_dir, '-p', args.port, '-t', '750']
+    if args.option == 'receiver':
+        cmd = [recv_src, args.ip , '1', args.port]
         check_call(cmd, cwd=utils.tmp_dir)
         return
 
-    if args.option == 'receiver':
-        cmd = [recv_src, args.ip, '-p', args.port]
+
+
+
+    if args.option == 'sender':
+        cmd = [send_src, args.port, '~' , '20000', '0' , 'westwood', '0', 'a' , 'b', '20', 'av' , '50' , '500' , '1']
         check_call(cmd, cwd=utils.tmp_dir)
         return
 

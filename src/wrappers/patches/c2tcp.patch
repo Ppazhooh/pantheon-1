@@ -1,0 +1,15 @@
+--- a/src/server-standalone.cc	2022-06-14 19:21:13.588665546 +0000
++++ b/src/server-standalone.cc	2022-06-14 19:23:39.402060534 +0000
+@@ -416,10 +416,10 @@
+         {
+             DBGMARK(DBGSERVER,5,"++++++\n");
+             len-=send(sock_local,write_message,strlen(write_message),0);
+-            usleep(50);         
++            // usleep(50);         
+             DBGMARK(DBGSERVER,5,"      ------\n");
+         }
+-        usleep(100);
++        // usleep(100);
+     }
+ 
+     //Send remaining data
